@@ -150,6 +150,18 @@ class User(UserMixin, AbstractBaseUser, PermissionsMixin, UserLastActivityMixin)
         _('allow newsletters'), null=True, default=None, help_text=_('Allow sending newsletters to user')
     )
 
+    class UserRole(models.TextChoices):
+        OWNER = 'owner', _('Owner')
+        CONTRIBUTOR = 'contributor', _('Contributor')
+
+    role = models.CharField(
+        _('role'),
+        max_length=20,
+        choices=UserRole.choices,
+        default=UserRole.OWNER,
+        help_text=_('User role type')
+    )
+
     objects = UserManager()
 
     EMAIL_FIELD = 'email'
