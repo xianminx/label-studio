@@ -29,8 +29,8 @@ body {
   bottom: 0;
   right: 0;
   width: 179px;
-  height: 239px;
-  background: url('../images/login-bg.svg') no-repeat center center;
+  height: 179px;
+  background: url('../images/login-bg-github.svg') no-repeat center center;
   background-size: contain;
 }
 
