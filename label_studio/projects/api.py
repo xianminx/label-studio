@@ -270,6 +270,13 @@ class ProjectCountsListAPI(generics.ListAPIView):
             organization=self.request.user.active_organization
         )
 
+        # Role-based filtering - same as ProjectListAPI
+        if self.request.user.role == User.UserRole.CONTRIBUTOR:
+            # Contributors only see projects where they are members
+            projects = projects.filter(
+                Q(members__user=self.request.user, members__enabled=True)
+            )
+
         # Only annotate FSM state for UI/API consumption when both feature flags are enabled
         if flag_set('fflag_feat_fit_568_finite_state_management', user=self.request.user) and flag_set(
             'fflag_feat_fit_710_fsm_state_fields', user=self.request.user
@@ -403,6 +410,13 @@ class ProjectAPI(generics.RetrieveUpdateDestroyAPIView):
         projects = Project.objects.with_counts(fields=fields).filter(
             organization=self.request.user.active_organization
         )
+
+        # Role-based filtering - same as ProjectListAPI
+        if self.request.user.role == User.UserRole.CONTRIBUTOR:
+            # Contributors only see projects where they are members
+            projects = projects.filter(
+                Q(members__user=self.request.user, members__enabled=True)
+            )
 
         # Only annotate FSM state for UI/API consumption when both feature flags are enabled
         if flag_set('fflag_feat_fit_568_finite_state_management', user=self.request.user) and flag_set(

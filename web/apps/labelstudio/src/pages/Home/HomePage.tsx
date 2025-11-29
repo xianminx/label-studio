@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useUpdatePageTitle } from "@humansignal/core";
+import { useAuth } from "@humansignal/core/providers/AuthProvider";
 import { HeidiTips } from "../../components/HeidiTips/HeidiTips";
 import { useAPI } from "../../providers/ApiProvider";
 import { CreateProject } from "../CreateProject/CreateProject";
@@ -52,9 +53,11 @@ type Action = (typeof actions)[number]["type"];
 
 export const HomePage: Page = () => {
   const api = useAPI();
+  const { user } = useAuth();
   const [creationDialogOpen, setCreationDialogOpen] = useState(false);
   const [invitationOpen, setInvitationOpen] = useState(false);
 
+  const isContributor = user?.role === "contributor";
   useUpdatePageTitle("Home");
   const { data, isFetching, isSuccess, isError } = useQuery({
     queryKey: ["projects", { page_size: 10 }],
@@ -90,22 +93,24 @@ export const HomePage: Page = () => {
               Let's get you started.
             </Typography>
           </div>
-          <div className="flex justify-start gap-4">
-            {actions.map((action) => {
-              return (
-                <Button
-                  key={action.title}
-                  look="outlined"
-                  align="center"
-                  className="flex-grow-0 text-16/24 gap-2 text-primary-content text-left min-w-[250px] [&_svg]:w-6 [&_svg]:h-6 pl-2"
-                  onClick={handleActions(action.type)}
-                  leading={<action.icon />}
-                >
-                  {action.title}
-                </Button>
-              );
-            })}
-          </div>
+          {!isContributor && (
+            <div className="flex justify-start gap-4">
+              {actions.map((action) => {
+                return (
+                  <Button
+                    key={action.title}
+                    look="outlined"
+                    align="center"
+                    className="flex-grow-0 text-16/24 gap-2 text-primary-content text-left min-w-[250px] [&_svg]:w-6 [&_svg]:h-6 pl-2"
+                    onClick={handleActions(action.type)}
+                    leading={<action.icon />}
+                  >
+                    {action.title}
+                  </Button>
+                );
+              })}
+            </div>
+          )}
 
           <SimpleCard
             title={
@@ -125,7 +130,7 @@ export const HomePage: Page = () => {
               </div>
             ) : isError ? (
               <div className="h-64 flex justify-center items-center">can't load projects</div>
-            ) : isSuccess && data && data.results.length === 0 ? (
+            ) : isSuccess && data && data.results.length === 0 && !isContributor ? (
               <div className="flex flex-col justify-center items-center border border-primary-border-subtle bg-primary-emphasis-subtle rounded-lg h-64">
                 <div
                   className={

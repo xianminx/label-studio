@@ -35,7 +35,7 @@ export const ProjectsList = ({ projects, currentPage, totalItems, loadNextPage, 
   );
 };
 
-export const EmptyProjectsList = ({ openModal }) => {
+export const EmptyProjectsList = ({ openModal, isContributor }) => {
   return (
     <div className={cn("empty-projects-page").toClassName()}>
       <img
@@ -44,10 +44,14 @@ export const EmptyProjectsList = ({ openModal }) => {
         src={absoluteURL("/static/images/opossum_looking.png")}
       />
       <h1 className={cn("empty-projects-page").elem("header").toClassName()}>Heidi doesn't see any projects here!</h1>
-      <p>Create one and start labeling your data.</p>
-      <Button onClick={openModal} className="my-8" aria-label="Create new project">
-        Create Project
-      </Button>
+      {!isContributor && (
+        <>
+          <p>Create one and start labeling your data.</p>
+          <Button onClick={openModal} className="my-8" aria-label="Create new project">
+            Create Project
+          </Button>
+        </>
+      )}
     </div>
   );
 };
@@ -141,7 +145,7 @@ const ProjectCard = ({ project }) => {
         <div className={cn("project-card").elem("description").toClassName()}>{project.description}</div>
         <div className={cn("project-card").elem("info").toClassName()}>
           <div className={cn("project-card").elem("created-date").toClassName()}>
-            {format(new Date(project.created_at), "dd MMM 'yy, HH:mm")}
+            {format(new Date(project.created_at), "dd MMM yy, HH:mm")}
           </div>
           <div className={cn("project-card").elem("created-by").toClassName()}>
             <Userpic src="#" user={project.created_by} showUsernameTooltip />
