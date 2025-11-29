@@ -435,3 +435,27 @@ class GetFieldsSerializer(serializers.Serializer):
     def validate_filter(self, value):
         if value in ['all', 'pinned_only', 'exclude_pinned']:
             return value
+
+
+class ProjectContributorSerializer(UserSimpleSerializer):
+    """Serializer for project contributors with enabled status"""
+    enabled = serializers.BooleanField(read_only=True)
+
+    class Meta(UserSimpleSerializer.Meta):
+        fields = UserSimpleSerializer.Meta.fields + ('enabled',)
+
+
+class ProjectContributorUpdateSerializer(serializers.Serializer):
+    """Serializer for updating project contributor access"""
+    id = serializers.IntegerField(required=True)
+    enabled = serializers.BooleanField(required=True)
+
+
+class ProjectContributorResponseSerializer(serializers.Serializer):
+    """Serializer for contributor update response"""
+    id = serializers.IntegerField()
+    email = serializers.EmailField()
+    enabled = serializers.BooleanField()
+    message = serializers.CharField()
+
+
