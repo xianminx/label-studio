@@ -14,6 +14,7 @@ import { isDefined } from "../../utils/helpers";
 import { ImportModal } from "../CreateProject/Import/ImportModal";
 import { ExportPage } from "../ExportPage/ExportPage";
 import { APIConfig } from "./api-config";
+import { useAuth } from "@humansignal/core/providers/AuthProvider";
 
 import "./DataManager.scss";
 
@@ -236,9 +237,11 @@ DataManagerPage.pages = {
 };
 DataManagerPage.context = ({ dmRef }) => {
   const { project } = useProject();
+  const { user } = useAuth();
   const [mode, setMode] = useState(dmRef?.mode ?? "explorer");
-
-  const links = {
+  
+  const isContributor = user?.role === "contributor";
+  const links = isContributor ? {} : {
     "/settings": "Settings",
   };
 

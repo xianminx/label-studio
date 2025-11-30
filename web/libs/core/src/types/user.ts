@@ -17,5 +17,7 @@ export type APIUser = {
   };
   allow_newsletters: boolean;
   date_joined: string;
+  role: 'owner' | 'contributor';
+  role_display: string;
   permissions?: Ability[];
 };

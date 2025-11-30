@@ -64,6 +64,12 @@ class UserSignupForm(forms.Form):
     allow_newsletters = forms.BooleanField(required=False)
     how_find_us = forms.CharField(required=False)
     elaborate = forms.CharField(required=False)
+    role = forms.ChoiceField(
+        choices=User.UserRole.choices,
+        required=True,
+        initial=User.UserRole.OWNER,
+        error_messages={'required': 'Please select a role'}
+    )
 
     def clean_password(self):
         password = self.cleaned_data.get('password')
@@ -95,6 +101,8 @@ class UserSignupForm(forms.Form):
         email = cleaned['email'].lower()
         allow_newsletters = None
         how_find_us = None
+        role = cleaned.get('role', User.UserRole.OWNER)
+
         if 'allow_newsletters' in cleaned:
             allow_newsletters = cleaned['allow_newsletters']
         if 'how_find_us' in cleaned:
@@ -102,7 +110,12 @@ class UserSignupForm(forms.Form):
         if 'elaborate' in cleaned and how_find_us == FOUND_US_ELABORATE:
             cleaned['elaborate']
 
-        user = User.objects.create_user(email, password, allow_newsletters=allow_newsletters)
+        user = User.objects.create_user(
+            email,
+            password,
+            allow_newsletters=allow_newsletters,
+            role=role
+        )
         return user
 
 

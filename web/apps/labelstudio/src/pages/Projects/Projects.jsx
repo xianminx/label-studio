@@ -12,6 +12,7 @@ import { DataManagerPage } from "../DataManager/DataManager";
 import { SettingsPage } from "../Settings";
 import { EmptyProjectsList, ProjectsList } from "./ProjectsList";
 import { useAbortController, useUpdatePageTitle } from "@humansignal/core";
+import { useAuth } from "@humansignal/core/providers/AuthProvider";
 import "./Projects.scss";
 
 const getCurrentPage = () => {
@@ -22,6 +23,7 @@ const getCurrentPage = () => {
 
 export const ProjectsPage = () => {
   const api = React.useContext(ApiContext);
+  const { user } = useAuth();
   const abortController = useAbortController();
   const [projectsList, setProjectsList] = React.useState([]);
   const [networkState, setNetworkState] = React.useState(null);
@@ -33,6 +35,7 @@ export const ProjectsPage = () => {
   const defaultPageSize = Number.parseInt(localStorage.getItem("pages:projects-list") ?? 30);
 
   const [modal, setModal] = React.useState(false);
+  const isContributor = user?.role === "contributor";
 
   const openModal = () => setModal(true);
 
@@ -113,8 +116,9 @@ export const ProjectsPage = () => {
   React.useEffect(() => {
     // there is a nice page with Create button when list is empty
     // so don't show the context button in that case
-    setContextProps({ openModal, showButton: projectsList.length > 0 });
-  }, [projectsList.length]);
+    // Hide button for contributors
+    setContextProps({ openModal, showButton: projectsList.length > 0 && !isContributor });
+  }, [projectsList.length, isContributor]);
 
   return (
     <div className={cn("projects-page").toClassName()}>
@@ -132,7 +136,7 @@ export const ProjectsPage = () => {
               pageSize={defaultPageSize}
             />
           ) : (
-            <EmptyProjectsList openModal={openModal} />
+            <EmptyProjectsList openModal={openModal} isContributor={isContributor} />
           )}
           {modal && <CreateProject onClose={closeModal} />}
         </div>

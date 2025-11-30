@@ -18,6 +18,7 @@ from core.utils.serializer_to_openapi_params import serializer_to_openapi_params
 from data_manager.functions import filters_ordering_selected_items_exist, get_prepared_queryset
 from django.conf import settings
 from django.db import IntegrityError
+from django.db.models import Q
 from django.db.models import F
 from django.http import Http404
 from django.utils.decorators import method_decorator
@@ -41,9 +42,12 @@ from projects.serializers import (
     ProjectReimportSerializer,
     ProjectSerializer,
     ProjectSummarySerializer,
+    ProjectContributorSerializer,
+    ProjectContributorUpdateSerializer,
+    ProjectContributorResponseSerializer,
 )
 from rest_framework import filters, generics, status
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.exceptions import ValidationError as RestValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -180,9 +184,20 @@ class ProjectListAPI(generics.ListCreateAPIView):
         serializer.is_valid(raise_exception=True)
         fields = serializer.validated_data.get('include')
         filter = serializer.validated_data.get('filter')
+
+        # Base query: projects in user's organization
         projects = Project.objects.filter(organization=self.request.user.active_organization).order_by(
             F('pinned_at').desc(nulls_last=True), '-created_at'
         )
+
+        # Role-based filtering
+        if self.request.user.role == User.UserRole.CONTRIBUTOR:
+            # Contributors only see projects where they are members
+            projects = projects.filter(
+                Q(members__user=self.request.user, members__enabled=True)
+            )
+        # Owners see all projects in the organization (no additional filter needed)
+
         if filter in ['pinned_only', 'exclude_pinned']:
             projects = projects.filter(pinned_at__isnull=filter == 'exclude_pinned')
         projects = ProjectManager.with_counts_annotate(projects, fields=fields)
@@ -201,6 +216,10 @@ class ProjectListAPI(generics.ListCreateAPIView):
         return context
 
     def perform_create(self, ser):
+        # Only users with role='owner' can create projects
+        if self.request.user.role != User.UserRole.OWNER:
+            raise PermissionDenied('Only users with Owner role can create projects.')
+
         try:
             ser.save(organization=self.request.user.active_organization)
         except IntegrityError as e:
@@ -250,6 +269,13 @@ class ProjectCountsListAPI(generics.ListAPIView):
         projects = Project.objects.with_counts(fields=fields).filter(
             organization=self.request.user.active_organization
         )
+
+        # Role-based filtering - same as ProjectListAPI
+        if self.request.user.role == User.UserRole.CONTRIBUTOR:
+            # Contributors only see projects where they are members
+            projects = projects.filter(
+                Q(members__user=self.request.user, members__enabled=True)
+            )
 
         # Only annotate FSM state for UI/API consumption when both feature flags are enabled
         if flag_set('fflag_feat_fit_568_finite_state_management', user=self.request.user) and flag_set(
@@ -384,6 +410,13 @@ class ProjectAPI(generics.RetrieveUpdateDestroyAPIView):
         projects = Project.objects.with_counts(fields=fields).filter(
             organization=self.request.user.active_organization
         )
+
+        # Role-based filtering - same as ProjectListAPI
+        if self.request.user.role == User.UserRole.CONTRIBUTOR:
+            # Contributors only see projects where they are members
+            projects = projects.filter(
+                Q(members__user=self.request.user, members__enabled=True)
+            )
 
         # Only annotate FSM state for UI/API consumption when both feature flags are enabled
         if flag_set('fflag_feat_fit_568_finite_state_management', user=self.request.user) and flag_set(
@@ -910,3 +943,111 @@ class ProjectAnnotatorsAPI(generics.RetrieveAPIView):
         users = User.objects.filter(id__in=annotator_ids).prefetch_related('om_through').order_by('id')
         data = UserSimpleSerializer(users, many=True, context={'request': request}).data
         return Response(data)
+
+
+@extend_schema(
+    tags=['Projects'],
+    summary='Get project contributors',
+    description='Get list of all contributors in the organization with their assignment status for this project.',
+    responses={
+        200: OpenApiResponse(
+            description='List of contributors with enabled status',
+            response=ProjectContributorSerializer(many=True),
+        )
+    },
+)
+class ProjectContributorsAPI(generics.RetrieveAPIView):
+    permission_required = all_permissions.projects_change
+    queryset = Project.objects.all()
+
+    def get(self, request, *args, **kwargs):
+        project = self.get_object()
+
+        # Only owners can manage contributors
+        if request.user.role != User.UserRole.OWNER:
+            raise PermissionDenied('Only users with Owner role can manage project contributors.')
+
+        # Get all contributors in the organization
+        contributors = User.objects.filter(
+            active_organization=request.user.active_organization,
+            role=User.UserRole.CONTRIBUTOR
+        ).order_by('email')
+
+        # Annotate each user with their enabled status for this project
+        from projects.models import ProjectMember
+        result = []
+        for user in contributors:
+            member = ProjectMember.objects.filter(project=project, user=user).first()
+            # Add enabled attribute to user object
+            user.enabled = member.enabled if member else False
+            result.append(user)
+
+        serializer = ProjectContributorSerializer(result, many=True)
+        return Response(serializer.data)
+
+
+@extend_schema(
+    tags=['Projects'],
+    summary='Update project contributor',
+    description='Add or remove a contributor from a project by toggling their enabled status.',
+    request=ProjectContributorUpdateSerializer,
+    responses={
+        200: OpenApiResponse(
+            description='Contributor status updated',
+            response=ProjectContributorResponseSerializer,
+        ),
+        403: OpenApiResponse(description='Permission denied'),
+        404: OpenApiResponse(description='User not found'),
+    },
+)
+class ProjectContributorUpdateAPI(generics.UpdateAPIView):
+    permission_required = all_permissions.projects_change
+    queryset = Project.objects.all()
+    serializer_class = ProjectContributorUpdateSerializer
+
+    def patch(self, request, *args, **kwargs):
+        project = self.get_object()
+
+        # Only owners can manage contributors
+        if request.user.role != User.UserRole.OWNER:
+            raise PermissionDenied('Only users with Owner role can manage project contributors.')
+
+        # Validate input using serializer
+        input_serializer = ProjectContributorUpdateSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+
+        user_id = input_serializer.validated_data['id']
+        enabled = input_serializer.validated_data['enabled']
+
+        # Verify the user is a contributor in the same organization
+        try:
+            contributor = User.objects.get(
+                id=user_id,
+                active_organization=request.user.active_organization,
+                role=User.UserRole.CONTRIBUTOR
+            )
+        except User.DoesNotExist:
+            raise NotFound('Contributor not found in your organization')
+
+        # Create or update ProjectMember
+        from projects.models import ProjectMember
+        member, created = ProjectMember.objects.get_or_create(
+            project=project,
+            user=contributor,
+            defaults={'enabled': enabled}
+        )
+
+        if not created:
+            member.enabled = enabled
+            member.save()
+
+        # Return serialized response
+        response_data = {
+            'id': contributor.id,
+            'email': contributor.email,
+            'enabled': enabled,
+            'message': f"Contributor {'added to' if enabled else 'removed from'} project"
+        }
+        response_serializer = ProjectContributorResponseSerializer(response_data)
+        return Response(response_serializer.data)
+

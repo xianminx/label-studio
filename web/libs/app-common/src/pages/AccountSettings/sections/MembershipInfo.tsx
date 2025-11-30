@@ -31,41 +31,14 @@ export const MembershipInfo = () => {
         contributed_projects_count: number;
         annotations_count: number;
         created_at: string;
-        role: string;
       }>;
 
       const annotationCount = response?.annotations_count;
       const contributions = response?.contributed_projects_count;
-      let role = "Owner";
-
-      switch (response.role) {
-        case "OW":
-          role = "Owner";
-          break;
-        case "DI":
-          role = "Deactivated";
-          break;
-        case "AD":
-          role = "Administrator";
-          break;
-        case "MA":
-          role = "Manager";
-          break;
-        case "AN":
-          role = "Annotator";
-          break;
-        case "RE":
-          role = "Reviewer";
-          break;
-        case "NO":
-          role = "Pending";
-          break;
-      }
 
       return {
         annotationCount,
         contributions,
-        role,
       };
     },
   });
@@ -129,10 +102,10 @@ export const MembershipInfo = () => {
         </div>
       )}
 
-      {membership.data?.role && (
+      {user?.role_display && (
         <div className="flex gap-2 w-full justify-between">
           <div>My role</div>
-          <div>{membership.data.role}</div>
+          <div>{user.role_display}</div>
         </div>
       )}
 
