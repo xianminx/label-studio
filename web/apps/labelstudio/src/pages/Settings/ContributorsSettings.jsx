@@ -1,74 +1,76 @@
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useContext } from "react";
 import { Toggle, Typography } from "@humansignal/ui";
 import { ProjectContext } from "../../providers/ProjectProvider";
 import { useAPI } from "@humansignal/core";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import "./settings.scss";
 
 export const ContributorsSettings = () => {
   const { project } = useContext(ProjectContext);
   const api = useAPI();
-  const [contributors, setContributors] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  // Fetch contributors list
-  const fetchContributors = useCallback(async () => {
-    if (!project?.id) return;
-
-    try {
-      setLoading(true);
+  // Fetch contributors list using React Query
+  const { data: contributors = [], isLoading, isError } = useQuery({
+    queryKey: ["projectContributors", project?.id],
+    queryFn: async () => {
+      if (!project?.id) return [];
+      
       const response = await api.callApi("projectContributors", {
         params: {
           pk: project.id,
         },
       });
-      if (response) {
-        setContributors(response);
-      }
-    } catch (error) {
-      console.error("Failed to fetch contributors:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [project?.id, api]);
+      return response || [];
+    },
+    enabled: !!project?.id,
+  });
 
-  useEffect(() => {
-    fetchContributors();
-  }, [fetchContributors]);
-
-  // Toggle contributor assignment
-  const handleToggle = useCallback(async (userId, currentEnabled) => {
-    try {
-      const response = await api.callApi("updateProjectContributor", {
+  // Mutation for toggling contributor access
+  const toggleMutation = useMutation({
+    mutationFn: async ({ userId, enabled }) => {
+      return api.callApi("updateProjectContributor", {
         params: {
           pk: project.id,
         },
         body: {
           id: userId,
-          enabled: !currentEnabled,
+          enabled: enabled,
         },
       });
-
-      if (response) {
-        // Update local state
-        setContributors(prev =>
-          prev.map(contributor =>
-            contributor.id === userId
-              ? { ...contributor, enabled: !currentEnabled }
-              : contributor
-          )
-        );
-      }
-    } catch (error) {
+    },
+    onSuccess: () => {
+      // Invalidate and refetch contributors list
+      queryClient.invalidateQueries({ queryKey: ["projectContributors", project?.id] });
+    },
+    onError: (error) => {
       console.error("Failed to update contributor:", error);
-    }
-  }, [project?.id, api]);
+    },
+  });
 
-  if (loading) {
+  const handleToggle = (userId, currentEnabled) => {
+    toggleMutation.mutate({ userId, enabled: !currentEnabled });
+  };
+
+  if (isLoading) {
     return (
       <div className="w-full max-w-4xl">
         <div className="p-6">
           <h1 className="text-2xl font-medium mb-4 text-[#1f1f1f]">Contributors</h1>
           <Typography>Loading contributors...</Typography>
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="w-full max-w-4xl">
+        <div className="p-6">
+          <h1 className="text-2xl font-medium mb-4 text-[#1f1f1f]">Contributors</h1>
+          <div className="bg-red-50 rounded-lg border border-red-200 p-6">
+            <Typography className="text-red-600">Failed to load contributors. Please try again.</Typography>
+          </div>
         </div>
       </div>
     );
@@ -118,6 +120,7 @@ export const ContributorsSettings = () => {
                       <Toggle
                         checked={contributor.enabled}
                         onChange={() => handleToggle(contributor.id, contributor.enabled)}
+                        disabled={toggleMutation.isPending}
                       />
                     </div>
                   </td>
